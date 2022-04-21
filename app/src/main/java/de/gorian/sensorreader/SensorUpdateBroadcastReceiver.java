@@ -17,6 +17,8 @@ import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.util.Locale;
 
@@ -27,8 +29,9 @@ public class SensorUpdateBroadcastReceiver extends BroadcastReceiver implements 
 	MqttAndroidClient mqttAndroidClient;
 	boolean publishEnabled = true;
 	private String clientId = "SensorReader";
+	private String serverUri = Constant.MQTT_ANDROID_HOST;
 	private Context context;
-	private String serverUri = "tcp://127.0.0.1:1883";
+
 
 	public SensorUpdateBroadcastReceiver() {
 		super();
@@ -46,7 +49,7 @@ public class SensorUpdateBroadcastReceiver extends BroadcastReceiver implements 
 		connect();
 		try {
 			parseAndSendData(intent);
-		} catch (InterruptedException e) {
+		} catch (InterruptedException | JSONException e) {
 			e.printStackTrace();
 		}
 	}
@@ -56,8 +59,11 @@ public class SensorUpdateBroadcastReceiver extends BroadcastReceiver implements 
 			MqttConnectOptions mqttConnectOptions = new MqttConnectOptions();
 			mqttConnectOptions.setAutomaticReconnect(true);
 			mqttConnectOptions.setCleanSession(false);
+			mqttConnectOptions.setUserName(Constant.MQTT_ANDROID_USER);
+			mqttConnectOptions.setPassword(Constant.MQTT_ANDROID_PASS.toCharArray());
+
 			try {
-				addToHistory("Connecting to " + serverUri);
+				addToHistory("Connecting to " + Constant.MQTT_ANDROID_HOST);
 				mqttAndroidClient.connect(mqttConnectOptions, this.context, new IMqttActionListener() {
 					@Override
 					public void onSuccess(IMqttToken asyncActionToken) {
@@ -71,7 +77,7 @@ public class SensorUpdateBroadcastReceiver extends BroadcastReceiver implements 
 
 					@Override
 					public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-						addToHistory("Failed to connect to: " + serverUri);
+						addToHistory("Failed to connect to: " + Constant.MQTT_ANDROID_HOST);
 					}
 				});
 
@@ -84,7 +90,7 @@ public class SensorUpdateBroadcastReceiver extends BroadcastReceiver implements 
 
 	void createClient() {
 		if (mqttAndroidClient == null) {
-			mqttAndroidClient = new MqttAndroidClient(context, serverUri, clientId);
+			mqttAndroidClient = new MqttAndroidClient(context, Constant.MQTT_ANDROID_HOST, Constant.MQTT_ANDROID_CLIENT_NAME);
 			mqttAndroidClient.setCallback(new MqttCallbackExtended() {
 				@Override
 				public void connectComplete(boolean reconnect, String serverURI) {
@@ -114,7 +120,7 @@ public class SensorUpdateBroadcastReceiver extends BroadcastReceiver implements 
 		}
 	}
 
-	private void parseAndSendData(Intent intent) throws InterruptedException {
+	private void parseAndSendData(Intent intent) throws InterruptedException, JSONException {
 		Thread.sleep(200);
 		Log.d(TAG, "Broadcast received.");
 
@@ -134,12 +140,13 @@ public class SensorUpdateBroadcastReceiver extends BroadcastReceiver implements 
 			Log.e(TAG, "mqttAndroidClient is null. Could not connect to mqtt server. ");
 			return;
 		}
-		if (temperature != null)
-			publishMessage(publishTopicHeader + "/" + mac + "/temperature", String.format(Locale.GERMANY, "%2.1f", temperature));
-		if (humidity != null)
-			publishMessage(publishTopicHeader + "/" + mac + "/humidity", String.format(Locale.GERMANY, "%2.1f", humidity));
-		if (battery != null)
-			publishMessage(publishTopicHeader + "/" + mac + "/battery", String.format(Locale.GERMANY, "%3d", battery));
+
+		JSONObject status = new JSONObject();
+		if (temperature != null) status.put("ble_temperature", String.valueOf(temperature));
+		if (humidity != null) status.put("ble_humidity", String.valueOf(humidity));
+		if (battery != null) status.put("ble_battery", String.valueOf(battery));
+
+		if(status.length() > 0) publishMessage(Constant.MQTT_ANDROID_STATUS_TOPIC, String.valueOf(status));
 	}
 
 	private void addToHistory(String mainText) {
@@ -154,7 +161,7 @@ public class SensorUpdateBroadcastReceiver extends BroadcastReceiver implements 
 			MqttMessage message = new MqttMessage();
 			message.setPayload(publishMessage.getBytes());
 			mqttAndroidClient.publish(publishTopic, message);
-			addToHistory("Message Published");
+			addToHistory("Message Published to: " + publishTopic + " with message: " + message);
 			if (!mqttAndroidClient.isConnected()) {
 				addToHistory(mqttAndroidClient.getBufferedMessageCount() + " messages in buffer.");
 			}

@@ -54,7 +54,7 @@ public class BluetoothLeService extends Service implements BluetoothProfile, Mqt
 					final BluetoothDevice device = result.getDevice();
 
 //					Log.i(TAG, "New BLE device found: " + device.getName() + " " + device.getAddress());
-					if (device.getName() != null && device.getName().contains("MJ_HT_V1")) {
+					if (device.getName() != null && device.getName().contains(Constant.MIJIA_NAME)) {
 
 						devices.add(device);
 						try {
@@ -144,23 +144,9 @@ public class BluetoothLeService extends Service implements BluetoothProfile, Mqt
 			try {
 				if (hexBytes.length < 12) return;
 
-				int[] data = new int[hexBytes.length];
-				for (int ii = 0; ii < hexBytes.length; ii++) {
-					data[ii] = Integer.parseInt(hexBytes[ii], 16);
-				}
-				switch (data[11]) {
-					case 0x06: //humidity
-						humidity = data[14] / 10.d + (data[15] * 16 * 16) / 10.d;
-						break;
-					case 0x0D: //temp + humidity
-						humidity = data[16] / 10.d + data[17] * 16 * 16 / 10.d;
-					case 0x04: //temp
-						temperature = data[14] / 10.d + data[15] * 16 * 16 / 10.d;
-						break;
-					case 0x0A: //battery
-						battery = data[14];
-						break;
-				}
+				temperature = (double) (Integer.parseInt(hexBytes[7] + hexBytes[6], 16) / 100.0);
+				humidity = (double) (Integer.parseInt(hexBytes[9] + hexBytes[8], 16) / 100.0);
+				battery = Integer.parseInt(hexBytes[12], 16);
 			} catch (ArrayIndexOutOfBoundsException e) {
 				e.printStackTrace();
 			}
